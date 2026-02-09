@@ -172,6 +172,9 @@ case "$GAMEMODE" in
         ;;
 esac
 
+# Set library path (required for libv8.so and other dependencies)
+export LD_LIBRARY_PATH="$INSTALL_DIR/game/bin/linuxsteamrt64:$LD_LIBRARY_PATH"
+
 screen -dmS cs2server ./game/bin/linuxsteamrt64/cs2 \
     -dedicated \
     -console \
