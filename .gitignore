@@ -1,0 +1,14 @@
+# Server files (generated after install)
+cs2-server/
+steamcmd/
+
+# Tokens and secrets
+.gslt_token
+*.token
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
