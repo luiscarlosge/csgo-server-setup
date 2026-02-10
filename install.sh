@@ -2,6 +2,11 @@
 #===============================================================================
 # CS2 Server Installation Script
 # For Ubuntu 22.04/24.04 on Azure
+# 
+# Features:
+# - All game modes (Competitive, Casual, Deathmatch, Arms Race, Wingman)
+# - 5-minute match duration for applicable modes
+# - Map voting at end of match
 #===============================================================================
 
 set -e
@@ -10,7 +15,10 @@ set -e
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}   CS2 Server Installation Script${NC}"
@@ -35,12 +43,12 @@ else
     read -r LOGIN_TOKEN
 fi
 
-echo -e "${YELLOW}[1/6] Updating system and installing dependencies...${NC}"
+echo -e "${YELLOW}[1/7] Updating system and installing dependencies...${NC}"
 sudo dpkg --add-architecture i386
 sudo apt-get update
 sudo apt-get install -y lib32gcc-s1 lib32stdc++6 libsdl2-2.0-0:i386 curl wget tar screen
 
-echo -e "${YELLOW}[2/6] Installing SteamCMD...${NC}"
+echo -e "${YELLOW}[2/7] Installing SteamCMD...${NC}"
 mkdir -p "$STEAMCMD_DIR"
 cd "$STEAMCMD_DIR"
 if [ ! -f "steamcmd.sh" ]; then
@@ -49,59 +57,37 @@ if [ ! -f "steamcmd.sh" ]; then
     rm steamcmd_linux.tar.gz
 fi
 
-echo -e "${YELLOW}[3/6] Creating server directory...${NC}"
+echo -e "${YELLOW}[3/7] Creating server directory...${NC}"
 mkdir -p "$INSTALL_DIR"
 
-echo -e "${YELLOW}[4/6] Downloading CS2 Dedicated Server (this may take a while)...${NC}"
+echo -e "${YELLOW}[4/7] Downloading CS2 Dedicated Server (this may take a while)...${NC}"
 cd "$STEAMCMD_DIR"
 ./steamcmd.sh +force_install_dir "$INSTALL_DIR" +login anonymous +app_update 730 validate +quit
 
-echo -e "${YELLOW}[5/6] Configuring server...${NC}"
+echo -e "${YELLOW}[5/7] Configuring server...${NC}"
 
-# Create server.cfg
+# Create cfg directory
 mkdir -p "$INSTALL_DIR/game/csgo/cfg"
-cat > "$INSTALL_DIR/game/csgo/cfg/server.cfg" << 'SERVERCFG'
-// Server Configuration
-hostname "CS2 Server - Lucho"
+
+# Copy config files if they exist in script directory
+if [ -d "$SCRIPT_DIR/cfg" ]; then
+    echo "Copying configuration files..."
+    cp -v "$SCRIPT_DIR/cfg/"*.cfg "$INSTALL_DIR/game/csgo/cfg/" 2>/dev/null || true
+    cp -v "$SCRIPT_DIR/cfg/gamemodes_server.txt" "$INSTALL_DIR/game/csgo/" 2>/dev/null || true
+else
+    # Create default server.cfg if no cfg directory
+    cat > "$INSTALL_DIR/game/csgo/cfg/server.cfg" << 'SERVERCFG'
+hostname "CS2 Server"
 sv_cheats 0
 sv_lan 0
-
-// Network settings
-sv_maxrate 0
-sv_minrate 128000
-sv_maxupdaterate 128
-sv_minupdaterate 64
-
-// Game settings
 mp_autoteambalance 1
-mp_limitteams 2
 mp_friendlyfire 0
-
-// Round settings
-mp_roundtime 1.92
-mp_roundtime_defuse 1.92
-mp_roundtime_hostage 1.92
-mp_maxrounds 30
-mp_halftime 1
-
-// Warmup
-mp_warmuptime 60
-mp_warmup_pausetimer 0
-
-// Bot settings
-bot_quota 10
-bot_quota_mode fill
-bot_difficulty 2
-
-// Logging
-log on
-sv_logbans 1
-sv_logecho 1
-sv_logfile 1
-
-// RCON (change password!)
+bot_quota 0
+mp_endmatch_votenextmap 1
+mp_endmatch_votenextleveltime 20
 rcon_password "changeme123"
 SERVERCFG
+fi
 
 # Create autoexec.cfg
 cat > "$INSTALL_DIR/game/csgo/cfg/autoexec.cfg" << 'AUTOEXEC'
@@ -113,16 +99,27 @@ AUTOEXEC
 echo "$LOGIN_TOKEN" > "$INSTALL_DIR/.gslt_token"
 chmod 600 "$INSTALL_DIR/.gslt_token"
 
-echo -e "${YELLOW}[6/6] Creating management scripts...${NC}"
+echo -e "${YELLOW}[6/7] Creating management scripts...${NC}"
 
-# Create start script
+# Create start script with config loading
 cat > "$INSTALL_DIR/start.sh" << 'STARTSCRIPT'
 #!/bin/bash
+#===============================================================================
+# CS2 Server Start Script
+# Supports: competitive, casual, deathmatch, armsrace, demolition, wingman
+#===============================================================================
+
 INSTALL_DIR="$(dirname "$(readlink -f "$0")")"
 TOKEN=$(cat "$INSTALL_DIR/.gslt_token" 2>/dev/null)
 
 if [ -z "$TOKEN" ]; then
     echo "Error: No GSLT token found. Please run install.sh first."
+    exit 1
+fi
+
+# Check if already running
+if screen -list | grep -q "cs2server"; then
+    echo "Server is already running. Stop it first with ./stop.sh"
     exit 1
 fi
 
@@ -133,47 +130,76 @@ GAMEMODE="${1:-competitive}"
 MAP="${2:-de_dust2}"
 MAXPLAYERS="${3:-16}"
 
-echo "Starting CS2 Server..."
+echo "========================================"
+echo "Starting CS2 Server"
+echo "========================================"
 echo "  Mode: $GAMEMODE"
 echo "  Map: $MAP"
 echo "  Max Players: $MAXPLAYERS"
+echo "========================================"
 
 # Game mode mapping
 case "$GAMEMODE" in
     competitive)
         GAMETYPE=0
         GAMEMODE_ID=1
+        MAPGROUP="mg_active"
+        CONFIG_FILE="gamemode_competitive.cfg"
         ;;
     casual)
         GAMETYPE=0
         GAMEMODE_ID=0
+        MAPGROUP="mg_active"
+        CONFIG_FILE="gamemode_casual.cfg"
         ;;
     deathmatch)
         GAMETYPE=1
         GAMEMODE_ID=2
+        MAPGROUP="mg_deathmatch"
+        CONFIG_FILE="gamemode_deathmatch.cfg"
         ;;
-    armsrace)
+    armsrace|gunmode|gungame)
         GAMETYPE=1
         GAMEMODE_ID=0
+        MAPGROUP="mg_armsrace"
+        CONFIG_FILE="gamemode_armsrace.cfg"
+        # Use armsrace map if none specified
+        if [ "$MAP" = "de_dust2" ]; then
+            MAP="ar_shoots"
+        fi
         ;;
     demolition)
         GAMETYPE=1
         GAMEMODE_ID=1
+        MAPGROUP="mg_active"
+        CONFIG_FILE="gamemode_casual.cfg"
         ;;
     wingman)
         GAMETYPE=0
         GAMEMODE_ID=2
+        MAPGROUP="mg_wingman"
         MAXPLAYERS=4
+        CONFIG_FILE="gamemode_wingman.cfg"
         ;;
     *)
-        echo "Unknown game mode. Using competitive."
-        GAMETYPE=0
-        GAMEMODE_ID=1
+        echo "Unknown game mode: $GAMEMODE"
+        echo "Available: competitive, casual, deathmatch, armsrace, demolition, wingman"
+        exit 1
         ;;
 esac
 
-# Set library path (required for libv8.so and other dependencies)
+# Set library path (required for CS2)
 export LD_LIBRARY_PATH="$INSTALL_DIR/game/bin/linuxsteamrt64:$LD_LIBRARY_PATH"
+
+# Build exec command
+EXEC_CMD="server.cfg"
+if [ -f "$INSTALL_DIR/game/csgo/cfg/$CONFIG_FILE" ]; then
+    EXEC_CMD="$CONFIG_FILE"
+    echo "  Config: $CONFIG_FILE"
+fi
+
+echo "  MapGroup: $MAPGROUP"
+echo ""
 
 screen -dmS cs2server ./game/bin/linuxsteamrt64/cs2 \
     -dedicated \
@@ -181,14 +207,19 @@ screen -dmS cs2server ./game/bin/linuxsteamrt64/cs2 \
     -usercon \
     +game_type $GAMETYPE \
     +game_mode $GAMEMODE_ID \
+    +mapgroup $MAPGROUP \
     +map $MAP \
     +sv_setsteamaccount $TOKEN \
     -maxplayers $MAXPLAYERS \
-    +exec server.cfg
+    +exec $EXEC_CMD
 
-echo "Server started in screen session 'cs2server'"
-echo "Use 'screen -r cs2server' to attach"
-echo "Use 'Ctrl+A, D' to detach"
+echo "✅ Server started in screen session 'cs2server'"
+echo ""
+echo "Commands:"
+echo "  screen -r cs2server  - View console"
+echo "  Ctrl+A, D            - Detach from console"
+echo "  ./stop.sh            - Stop server"
+echo "  ./status.sh          - Check status"
 STARTSCRIPT
 chmod +x "$INSTALL_DIR/start.sh"
 
@@ -198,7 +229,7 @@ cat > "$INSTALL_DIR/stop.sh" << 'STOPSCRIPT'
 echo "Stopping CS2 Server..."
 screen -S cs2server -X quit 2>/dev/null
 pkill -f "cs2 -dedicated" 2>/dev/null
-echo "Server stopped."
+echo "✅ Server stopped."
 STOPSCRIPT
 chmod +x "$INSTALL_DIR/stop.sh"
 
@@ -215,7 +246,7 @@ echo "Updating CS2 Server..."
 cd "$STEAMCMD_DIR"
 ./steamcmd.sh +force_install_dir "$INSTALL_DIR" +login anonymous +app_update 730 validate +quit
 
-echo "Update complete!"
+echo "✅ Update complete!"
 UPDATESCRIPT
 chmod +x "$INSTALL_DIR/update.sh"
 
@@ -252,28 +283,35 @@ cat > "$INSTALL_DIR/gamemode.sh" << 'GAMEMODESCRIPT'
 INSTALL_DIR="$(dirname "$(readlink -f "$0")")"
 
 show_help() {
+    echo "========================================"
     echo "CS2 Game Mode Manager"
+    echo "========================================"
     echo ""
     echo "Usage: ./gamemode.sh <mode> [map]"
     echo ""
     echo "Available modes:"
-    echo "  competitive  - Classic competitive (5v5, 30 rounds)"
-    echo "  casual       - Casual mode (10v10, relaxed rules)"
-    echo "  deathmatch   - Free-for-all deathmatch"
-    echo "  armsrace     - Arms Race (gun game)"
+    echo "  competitive  - Classic competitive (short match ~5 min)"
+    echo "  casual       - Casual mode (short match ~5 min)"
+    echo "  deathmatch   - Free-for-all deathmatch (5 min)"
+    echo "  armsrace     - Arms Race / Gun Game (5 min)"
     echo "  demolition   - Demolition mode"
-    echo "  wingman      - 2v2 competitive"
+    echo "  wingman      - 2v2 competitive (short match)"
     echo ""
-    echo "Available maps:"
-    echo "  Defuse: de_dust2, de_mirage, de_inferno, de_nuke, de_overpass,"
-    echo "          de_ancient, de_anubis, de_vertigo"
-    echo "  Hostage: cs_office, cs_italy"
-    echo "  Wingman: de_inferno, de_overpass, de_vertigo, de_nuke"
+    echo "Maps by mode:"
+    echo "  Arms Race:   ar_baggage, ar_pool_day, ar_shoots"
+    echo "  Competitive: de_dust2, de_mirage, de_inferno, de_ancient,"
+    echo "               de_anubis, de_nuke, de_overpass, de_vertigo"
+    echo "  Wingman:     de_inferno, de_overpass, de_vertigo, de_nuke"
+    echo ""
+    echo "Features:"
+    echo "  ✓ 5-minute matches (deathmatch, armsrace)"
+    echo "  ✓ Short rounds (competitive, casual, wingman)"
+    echo "  ✓ Map voting at end of match"
     echo ""
     echo "Examples:"
-    echo "  ./gamemode.sh competitive de_mirage"
+    echo "  ./gamemode.sh armsrace ar_shoots"
     echo "  ./gamemode.sh deathmatch de_dust2"
-    echo "  ./gamemode.sh wingman de_inferno"
+    echo "  ./gamemode.sh competitive de_mirage"
 }
 
 if [ -z "$1" ]; then
@@ -282,12 +320,17 @@ if [ -z "$1" ]; then
 fi
 
 MODE="$1"
-MAP="${2:-de_dust2}"
+MAP="$2"
 
-echo "Changing game mode to: $MODE on map: $MAP"
+echo "Changing game mode to: $MODE"
 "$INSTALL_DIR/stop.sh"
 sleep 2
-"$INSTALL_DIR/start.sh" "$MODE" "$MAP"
+
+if [ -n "$MAP" ]; then
+    "$INSTALL_DIR/start.sh" "$MODE" "$MAP"
+else
+    "$INSTALL_DIR/start.sh" "$MODE"
+fi
 GAMEMODESCRIPT
 chmod +x "$INSTALL_DIR/gamemode.sh"
 
@@ -387,6 +430,70 @@ esac
 BOTSSCRIPT
 chmod +x "$INSTALL_DIR/bots.sh"
 
+echo -e "${YELLOW}[7/7] Setting up map voting...${NC}"
+
+# Ensure gamemodes_server.txt exists
+if [ ! -f "$INSTALL_DIR/game/csgo/gamemodes_server.txt" ]; then
+    cat > "$INSTALL_DIR/game/csgo/gamemodes_server.txt" << 'MAPGROUPS'
+"gamemodes_server.txt"
+{
+    "mapgroups"
+    {
+        "mg_armsrace"
+        {
+            "name" "Arms Race Maps"
+            "maps"
+            {
+                "ar_baggage" ""
+                "ar_pool_day" ""
+                "ar_shoots" ""
+            }
+        }
+        "mg_deathmatch"
+        {
+            "name" "Deathmatch Maps"
+            "maps"
+            {
+                "de_dust2" ""
+                "de_mirage" ""
+                "de_inferno" ""
+                "de_ancient" ""
+                "de_anubis" ""
+                "de_nuke" ""
+                "de_overpass" ""
+            }
+        }
+        "mg_active"
+        {
+            "name" "Active Duty Maps"
+            "maps"
+            {
+                "de_dust2" ""
+                "de_mirage" ""
+                "de_inferno" ""
+                "de_ancient" ""
+                "de_anubis" ""
+                "de_nuke" ""
+                "de_overpass" ""
+                "de_vertigo" ""
+            }
+        }
+        "mg_wingman"
+        {
+            "name" "Wingman Maps"
+            "maps"
+            {
+                "de_inferno" ""
+                "de_overpass" ""
+                "de_vertigo" ""
+                "de_nuke" ""
+            }
+        }
+    }
+}
+MAPGROUPS
+fi
+
 echo ""
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}   Installation Complete!${NC}"
@@ -394,16 +501,25 @@ echo -e "${GREEN}========================================${NC}"
 echo ""
 echo "Server installed in: $INSTALL_DIR"
 echo ""
-echo "Quick Start:"
-echo "  cd $INSTALL_DIR"
-echo "  ./start.sh              # Start with defaults (competitive, de_dust2)"
-echo "  ./start.sh casual de_mirage  # Start casual on mirage"
-echo "  ./stop.sh               # Stop server"
-echo "  ./status.sh             # Check if running"
-echo "  ./console.sh            # View server console"
-echo "  ./gamemode.sh           # Change game mode"
-echo "  ./bots.sh               # Manage bots"
-echo "  ./update.sh             # Update server"
+echo -e "${CYAN}Game Modes Available:${NC}"
+echo "  ./start.sh competitive de_dust2  - Competitive (short)"
+echo "  ./start.sh casual de_mirage      - Casual (short)"
+echo "  ./start.sh deathmatch de_inferno - Deathmatch (5 min)"
+echo "  ./start.sh armsrace ar_shoots    - Gun Game (5 min)"
+echo "  ./start.sh wingman de_inferno    - 2v2 (short)"
+echo ""
+echo -e "${CYAN}Features:${NC}"
+echo "  ✓ 5-minute matches for DM/Arms Race"
+echo "  ✓ Short rounds for Competitive/Casual"
+echo "  ✓ Map voting at end of match"
+echo ""
+echo -e "${CYAN}Management:${NC}"
+echo "  ./stop.sh      - Stop server"
+echo "  ./status.sh    - Check if running"
+echo "  ./console.sh   - View server console"
+echo "  ./gamemode.sh  - Change game mode"
+echo "  ./bots.sh      - Manage bots"
+echo "  ./update.sh    - Update server"
 echo ""
 echo "Server will be visible at: Your_Public_IP:27015"
 echo ""

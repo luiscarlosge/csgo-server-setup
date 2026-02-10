@@ -1,217 +1,163 @@
-# CS2 Server Setup for Ubuntu (Azure)
+# CS2 Server Setup
 
-Scripts para instalar y administrar un servidor dedicado de Counter-Strike 2 en Ubuntu.
+Automated CS2 (Counter-Strike 2) dedicated server installation for Ubuntu 22.04/24.04.
 
-## 🎮 Características
+## Features
 
-- ✅ Instalación automatizada de SteamCMD y CS2
-- ✅ Todos los mapas predeterminados del juego
-- ✅ Cambio fácil entre modos de juego
-- ✅ Gestión de bots (añadir, quitar, dificultad)
-- ✅ Scripts de administración incluidos
-- ✅ Compatible con Ubuntu 22.04/24.04 en Azure
+- ✅ **All Game Modes**: Competitive, Casual, Deathmatch, Arms Race (Gun Game), Demolition, Wingman
+- ✅ **5-Minute Matches**: Quick games for Deathmatch and Arms Race
+- ✅ **Short Matches**: Reduced rounds for Competitive, Casual, and Wingman
+- ✅ **Map Voting**: Players vote for next map at end of match
+- ✅ **Easy Management**: Simple scripts to start/stop/change modes
 
-## 📋 Requisitos Previos
-
-1. **Máquina Virtual Ubuntu** (22.04 o 24.04 LTS)
-   - Mínimo: 2 vCPUs, 4GB RAM, 50GB disco
-   - Recomendado: 4 vCPUs, 8GB RAM, 100GB disco
-
-2. **Steam Game Server Login Token (GSLT)**
-   - Obtener en: https://steamcommunity.com/dev/managegameservers
-   - App ID para CS2: `730`
-
-3. **Puertos abiertos** (firewall/NSG de Azure):
-   - `27015/tcp` - Conexión de jugadores
-   - `27015/udp` - Conexión de jugadores
-   - `27020/udp` - SourceTV (opcional)
-   - `27005/udp` - Cliente Steam
-
-## 🚀 Instalación Rápida
+## Quick Install
 
 ```bash
-# Clonar repositorio
+# Clone the repository
 git clone https://github.com/luiscarlosge/csgo-server-setup.git
 cd csgo-server-setup
 
-# Ejecutar instalación (reemplaza TOKEN con tu GSLT)
+# Run installer (requires GSLT token from Steam)
 chmod +x install.sh
 ./install.sh YOUR_GSLT_TOKEN
 ```
 
-La instalación descargará ~35GB, puede tomar 15-30 minutos.
+Get your GSLT token at: https://steamcommunity.com/dev/managegameservers
 
-## 🎯 Uso
+## Game Modes
 
-### Iniciar el Servidor
+| Mode | Command | Duration | Description |
+|------|---------|----------|-------------|
+| **Arms Race** | `./start.sh armsrace ar_shoots` | 5 min | Gun Game - progress through weapons |
+| **Deathmatch** | `./start.sh deathmatch de_dust2` | 5 min | Free-for-all respawn |
+| **Competitive** | `./start.sh competitive de_mirage` | ~10 rounds | Short competitive match |
+| **Casual** | `./start.sh casual de_inferno` | ~8 rounds | Relaxed rules |
+| **Wingman** | `./start.sh wingman de_overpass` | ~8 rounds | 2v2 competitive |
+| **Demolition** | `./start.sh demolition de_dust2` | Standard | Mixed mode |
 
-```bash
-cd ~/cs2-server
+## Maps
 
-# Iniciar con configuración por defecto (competitive, de_dust2)
-./start.sh
+### Arms Race
+- `ar_baggage`
+- `ar_pool_day`
+- `ar_shoots`
 
-# Iniciar con modo y mapa específico
-./start.sh competitive de_mirage
-./start.sh casual de_inferno
-./start.sh deathmatch de_dust2
-```
+### Active Duty (Competitive/Casual/DM)
+- `de_dust2`, `de_mirage`, `de_inferno`
+- `de_ancient`, `de_anubis`, `de_nuke`
+- `de_overpass`, `de_vertigo`
 
-### Comandos Básicos
+### Wingman
+- `de_inferno`, `de_overpass`
+- `de_vertigo`, `de_nuke`
 
-| Comando | Descripción |
-|---------|-------------|
-| `./start.sh [modo] [mapa]` | Iniciar servidor |
-| `./stop.sh` | Detener servidor |
-| `./status.sh` | Ver estado del servidor |
-| `./console.sh` | Acceder a la consola |
-| `./update.sh` | Actualizar CS2 |
-| `./gamemode.sh` | Cambiar modo de juego |
-| `./bots.sh` | Gestionar bots |
-
-## 🎮 Modos de Juego
-
-```bash
-./gamemode.sh <modo> [mapa]
-```
-
-| Modo | Descripción |
-|------|-------------|
-| `competitive` | Competitivo clásico (5v5, 30 rondas) |
-| `casual` | Casual (10v10, reglas relajadas) |
-| `deathmatch` | Deathmatch libre |
-| `armsrace` | Carrera de armas |
-| `demolition` | Demolición |
-| `wingman` | Wingman (2v2) |
-
-### Ejemplos
+## Management Scripts
 
 ```bash
-./gamemode.sh competitive de_mirage    # Competitivo en Mirage
-./gamemode.sh deathmatch de_dust2      # Deathmatch en Dust2
-./gamemode.sh wingman de_inferno       # Wingman en Inferno
-```
+# Start server
+./start.sh <mode> <map> [maxplayers]
 
-## 🤖 Gestión de Bots
+# Stop server
+./stop.sh
 
-```bash
-./bots.sh <comando> [opciones]
-```
-
-| Comando | Descripción |
-|---------|-------------|
-| `add <team> [n]` | Añadir bots (t/ct/both) |
-| `remove <team\|all>` | Quitar bots |
-| `difficulty <0-3>` | Dificultad (0=fácil, 3=experto) |
-| `quota <n>` | Mantener n jugadores (rellena con bots) |
-| `stop` | Desactivar bots |
-
-### Ejemplos
-
-```bash
-./bots.sh add ct 3          # Añadir 3 bots CT
-./bots.sh add both 5        # Añadir 5 bots a cada equipo
-./bots.sh remove all        # Quitar todos los bots
-./bots.sh difficulty 2      # Dificultad media-alta
-./bots.sh quota 10          # Mantener 10 jugadores total
-```
-
-## 🗺️ Mapas Disponibles
-
-### Mapas de Defusa
-- `de_dust2` - Dust II (clásico)
-- `de_mirage` - Mirage
-- `de_inferno` - Inferno
-- `de_nuke` - Nuke
-- `de_overpass` - Overpass
-- `de_ancient` - Ancient
-- `de_anubis` - Anubis
-- `de_vertigo` - Vertigo
-
-### Mapas de Rehenes
-- `cs_office` - Office
-- `cs_italy` - Italy
-
-### Mapas Wingman
-- `de_inferno`
-- `de_overpass`
-- `de_vertigo`
-- `de_nuke`
-
-## ⚙️ Configuración Avanzada
-
-### Editar configuración del servidor
-
-```bash
-nano ~/cs2-server/game/csgo/cfg/server.cfg
-```
-
-### Configuraciones importantes
-
-```
-hostname "Mi Servidor CS2"      # Nombre del servidor
-rcon_password "tu_password"     # Contraseña de admin remoto
-sv_password "password"          # Contraseña para entrar (vacío = público)
-```
-
-### Cambiar GSLT Token
-
-```bash
-echo "NUEVO_TOKEN" > ~/cs2-server/.gslt_token
-```
-
-## 🔧 Solución de Problemas
-
-### El servidor no inicia
-```bash
-# Verificar logs
-screen -r cs2server
-
-# Reinstalar/actualizar
-./update.sh
-```
-
-### No aparece en la lista de servidores
-- Verificar que el GSLT token sea válido
-- Verificar puertos abiertos en Azure NSG
-- El servidor tarda unos minutos en aparecer
-
-### Desconexiones frecuentes
-```bash
-# Editar server.cfg y ajustar rates
-sv_maxrate 0
-sv_minrate 128000
-```
-
-## 📊 Monitoreo
-
-```bash
-# Ver si está corriendo
+# Check status
 ./status.sh
 
-# Ver uso de recursos
-htop
+# View console
+./console.sh
 
-# Ver conexiones activas
-netstat -an | grep 27015
-```
+# Change game mode
+./gamemode.sh <mode> [map]
 
-## 🔄 Actualizaciones
+# Manage bots
+./bots.sh add both 5      # Add 5 bots per team
+./bots.sh remove all      # Remove all bots
+./bots.sh quota 10        # Auto-fill to 10 players
+./bots.sh difficulty 2    # Set difficulty (0-3)
 
-CS2 se actualiza frecuentemente. Para actualizar:
-
-```bash
+# Update server
 ./update.sh
 ```
 
-Esto detendrá el servidor, descargará actualizaciones y podrás reiniciarlo después.
+## Configuration Files
 
-## 📝 Licencia
+Located in `cfg/`:
 
-MIT License - Libre para usar y modificar.
+| File | Description |
+|------|-------------|
+| `server.cfg` | Base server settings |
+| `gamemode_armsrace.cfg` | Arms Race settings (5 min) |
+| `gamemode_deathmatch.cfg` | Deathmatch settings (5 min) |
+| `gamemode_casual.cfg` | Casual settings (short) |
+| `gamemode_competitive.cfg` | Competitive settings (short) |
+| `gamemode_wingman.cfg` | Wingman settings (short) |
+| `gamemodes_server.txt` | Map groups for voting |
 
-## 🙏 Créditos
+## Map Voting
 
-- Valve Software por CS2
-- SteamCMD
-- Comunidad de servidores de CS
+Map voting is enabled by default. At the end of each match:
+- Players see a vote screen with available maps
+- 20 seconds to vote
+- Next map is selected based on votes
+
+## Firewall
+
+Open these ports on your firewall/cloud provider:
+
+```bash
+# Required
+27015/udp  # Game traffic
+27015/tcp  # RCON
+
+# Optional
+27020/udp  # SourceTV
+```
+
+## Azure Setup
+
+1. Create Ubuntu 22.04/24.04 VM (minimum 2 vCPU, 4GB RAM, 80GB disk)
+2. Open ports 27015/udp and 27015/tcp
+3. SSH in and run the installer
+4. Server accessible at `VM_PUBLIC_IP:27015`
+
+## Requirements
+
+- Ubuntu 22.04 or 24.04 (64-bit)
+- ~65GB disk space
+- 4GB+ RAM recommended
+- Steam GSLT token
+
+## Troubleshooting
+
+**Server won't start?**
+```bash
+# Check for errors
+./console.sh
+
+# Verify token
+cat ~/cs2-server/.gslt_token
+```
+
+**Can't connect?**
+```bash
+# Check if running
+./status.sh
+
+# Verify ports are open
+sudo ufw status
+```
+
+**Update failed?**
+```bash
+# Stop and retry
+./stop.sh
+./update.sh
+```
+
+## License
+
+MIT
+
+## Author
+
+Luis Carlos Galvis Espitia
